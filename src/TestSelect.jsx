@@ -84,6 +84,7 @@ function TestSelect({ cleanedData, onTestSelected }) {
       component: 'TestSix'
     }
   ];
+
   
   const handleTestSelect = (testId) => {
     // If already selected, deselect it; otherwise select it

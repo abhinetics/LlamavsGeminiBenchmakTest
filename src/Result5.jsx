@@ -40,16 +40,16 @@ function Result5() {
             try {
                 const results = await Promise.all(
                     cleanedData.map(async (text) => {
-                        const [hfResponse, geminiResponse] = await Promise.all([
-                            fetch('http://localhost:5800/api/hf-sentiment', {
+                        const [llamaResponse, geminiResponse] = await Promise.all([
+                            fetch('http://localhost:5800/api/llama-factuality', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ text }),
                             }).then(res => res.json()).catch(err => {
-                                console.error('Hugging Face Error:', err);
+                                console.error('Llama Error:', err);
                                 return {};
                             }),
-                            fetch('http://localhost:5800/api/gemini-generate', {
+                            fetch('http://localhost:5800/api/gemini-factuality', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ text }),
@@ -61,7 +61,7 @@ function Result5() {
 
                         return {
                             text: text,
-                            factuality_score: hfResponse?.[0]?.[0]?.score || 'N/A',
+                            factuality_score: llamaResponse?.candidates?.[0]?.content?.parts?.[0]?.text || 'N/A',
                             factuality_analysis: geminiResponse?.candidates?.[0]?.content?.parts?.[0]?.text || 'N/A'
                         };
                     })
@@ -82,19 +82,15 @@ function Result5() {
         if (apiResults) {
             // Process factuality distribution
             const distribution = {
-                'Highly Factual': 0,
-                'Mostly Factual': 0,
-                'Partially Factual': 0,
-                'Not Factual': 0
+                'Factual': 0,
+                'Non-Factual': 0,
+                'Unclear': 0
             };
 
             apiResults.forEach(result => {
-                const score = parseFloat(result.factuality_score);
-                if (!isNaN(score)) {
-                    if (score > 0.8) distribution['Highly Factual']++;
-                    else if (score > 0.6) distribution['Mostly Factual']++;
-                    else if (score > 0.4) distribution['Partially Factual']++;
-                    else distribution['Not Factual']++;
+                const llamaResult = result.factuality_score.trim();
+                if (llamaResult in distribution) {
+                    distribution[llamaResult]++;
                 }
             });
 
@@ -106,13 +102,15 @@ function Result5() {
             // Process confidence scores
             const confidenceScores = apiResults.map((result, index) => ({
                 text: result.text.substring(0, 20) + '...',
-                factuality_score: parseFloat(result.factuality_score) || 0
+                llama_result: result.factuality_score,
+                gemini_result: result.factuality_analysis
             }));
 
             // Process timeline data
             const timelineData = apiResults.map((result, index) => ({
                 index: index + 1,
-                score: parseFloat(result.factuality_score) || 0
+                llama_result: result.factuality_score,
+                gemini_result: result.factuality_analysis
             }));
 
             setChartData({
@@ -142,8 +140,8 @@ function Result5() {
                         <thead>
                             <tr>
                                 <th>Text</th>
-                                <th>Factuality Score</th>
-                                <th>Analysis</th>
+                                <th>Llama Factuality </th>
+                                <th>Gemini Factuality</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -196,16 +194,17 @@ function Result5() {
                     >
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="text" />
-                        <YAxis />
+                        <YAxis type="category" domain={['Factual', 'Non-Factual', 'Unclear']} />
                         <Tooltip />
                         <Legend />
-                        <Bar dataKey="factuality_score" fill="#8884d8" />
+                        <Bar dataKey="llama_result" fill="#8884d8" name="Llama Result" />
+                        <Bar dataKey="gemini_result" fill="#82ca9d" name="Gemini Result" />
                     </BarChart>
                 </div>
 
                 {/* Timeline Analysis */}
                 <div className="chart-container">
-                    <h3>Factuality Score Timeline</h3>
+                    <h3>Factuality Analysis Timeline</h3>
                     <LineChart
                         width={500}
                         height={300}
@@ -214,10 +213,11 @@ function Result5() {
                     >
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="index" />
-                        <YAxis />
+                        <YAxis type="category" domain={['Factual', 'Non-Factual', 'Unclear']} />
                         <Tooltip />
                         <Legend />
-                        <Line type="monotone" dataKey="score" stroke="#8884d8" />
+                        <Line type="stepAfter" dataKey="llama_result" stroke="#8884d8" name="Llama Result" />
+                        <Line type="stepAfter" dataKey="gemini_result" stroke="#82ca9d" name="Gemini Result" />
                     </LineChart>
                 </div>
             </div>

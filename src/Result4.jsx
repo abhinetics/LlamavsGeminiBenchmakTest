@@ -40,16 +40,16 @@ function Result4() {
             try {
                 const results = await Promise.all(
                     cleanedData.map(async (text) => {
-                        const [hfResponse, geminiResponse] = await Promise.all([
-                            fetch('http://localhost:5800/api/hf-sentiment', {
+                        const [llamaResponse, geminiResponse] = await Promise.all([
+                            fetch('http://localhost:5800/api/llama-hallucination', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ text }),
                             }).then(res => res.json()).catch(err => {
-                                console.error('Hugging Face Error:', err);
+                                console.error('Llama Error:', err);
                                 return {};
                             }),
-                            fetch('http://localhost:5800/api/gemini-generate', {
+                            fetch('http://localhost:5800/api/gemini-hallucination', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ text }),
@@ -61,7 +61,7 @@ function Result4() {
 
                         return {
                             text: text,
-                            hallucination_score: hfResponse?.[0]?.[0]?.score || 'N/A',
+                            hallucination_score: llamaResponse?.candidates?.[0]?.content?.parts?.[0]?.text || 'N/A',
                             analysis: geminiResponse?.candidates?.[0]?.content?.parts?.[0]?.text || 'N/A'
                         };
                     })
@@ -82,17 +82,15 @@ function Result4() {
         if (apiResults) {
             // Process hallucination distribution
             const distribution = {
-                'Low Risk': 0,
-                'Medium Risk': 0,
-                'High Risk': 0
+                'Factual': 0,
+                'Hallucinated': 0,
+                'Unsure': 0
             };
 
             apiResults.forEach(result => {
-                const score = parseFloat(result.hallucination_score);
-                if (!isNaN(score)) {
-                    if (score < 0.3) distribution['Low Risk']++;
-                    else if (score < 0.7) distribution['Medium Risk']++;
-                    else distribution['High Risk']++;
+                const llamaResult = result.hallucination_score.trim();
+                if (llamaResult in distribution) {
+                    distribution[llamaResult]++;
                 }
             });
 
@@ -104,13 +102,15 @@ function Result4() {
             // Process confidence scores
             const confidenceScores = apiResults.map((result, index) => ({
                 text: result.text.substring(0, 20) + '...',
-                confidence: 1 - (parseFloat(result.hallucination_score) || 0)
+                llama_result: result.hallucination_score,
+                gemini_result: result.analysis
             }));
 
             // Process timeline data
             const timelineData = apiResults.map((result, index) => ({
                 index: index + 1,
-                score: parseFloat(result.hallucination_score) || 0
+                llama_result: result.hallucination_score,
+                gemini_result: result.analysis
             }));
 
             setChartData({
@@ -140,8 +140,8 @@ function Result4() {
                         <thead>
                             <tr>
                                 <th>Text</th>
-                                <th>Hallucination Risk Score</th>
-                                <th>Analysis</th>
+                                <th> Llama Hallucination Analysis</th>
+                                <th>Gemini Hallucination Analysis</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -194,16 +194,17 @@ function Result4() {
                     >
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="text" />
-                        <YAxis />
+                        <YAxis type="category" domain={['Factual', 'Unsure', 'Hallucinated']} />
                         <Tooltip />
                         <Legend />
-                        <Bar dataKey="confidence" fill="#8884d8" />
+                        <Bar dataKey="llama_result" fill="#8884d8" name="Llama Result" />
+                        <Bar dataKey="gemini_result" fill="#82ca9d" name="Gemini Result" />
                     </BarChart>
                 </div>
 
                 {/* Timeline Analysis */}
                 <div className="chart-container">
-                    <h3>Risk Score Timeline</h3>
+                    <h3>Hallucination Analysis Timeline</h3>
                     <LineChart
                         width={500}
                         height={300}
@@ -212,10 +213,11 @@ function Result4() {
                     >
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="index" />
-                        <YAxis />
+                        <YAxis type="category" domain={['Factual', 'Unsure', 'Hallucinated']} />
                         <Tooltip />
                         <Legend />
-                        <Line type="monotone" dataKey="score" stroke="#8884d8" />
+                        <Line type="stepAfter" dataKey="llama_result" stroke="#8884d8" name="Llama Result" />
+                        <Line type="stepAfter" dataKey="gemini_result" stroke="#82ca9d" name="Gemini Result" />
                     </LineChart>
                 </div>
             </div>

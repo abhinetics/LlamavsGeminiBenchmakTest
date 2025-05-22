@@ -42,13 +42,13 @@ function Result() {
             try {
                 const results = await Promise.all(
                     cleanedData.map(async (text, index) => {
-                        const [hfResponse, geminiResponse] = await Promise.all([
-                            fetch('http://localhost:5800/api/hf-sentiment', {
+                        const [llamaResponse, geminiResponse] = await Promise.all([
+                            fetch('http://localhost:5800/api/llama-generate', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ text }),
                             }).then(res => res.json()).catch(err => {
-                                console.error('Hugging Face Error:', err);
+                                console.error('llama Error:', err);
                                 return {};
                             }),
                             fetch('http://localhost:5800/api/gemini-generate', {
@@ -63,7 +63,7 @@ function Result() {
 
                         return {
                             cleaned_text: text,
-                            hf_sentiment: hfResponse?.[0]?.[0]?.label || 'N/A',
+                            llama_sentiment: geminiResponse?.candidates?.[0]?.content?.parts?.[0]?.text || 'N/A',
                             gemini_response: geminiResponse?.candidates?.[0]?.content?.parts?.[0]?.text || 'N/A'
                         };
                     })
@@ -99,7 +99,7 @@ function Result() {
             const responseComparison = apiResults.map((result, index) => ({
                 index: index + 1,
                 text: result.cleaned_text.substring(0, 20) + '...',
-                HuggingFace: result.hf_sentiment,
+                Llama: result.llama_sentiment,
                 Gemini: result.gemini_response
             }));
 
@@ -137,7 +137,7 @@ function Result() {
                             <thead>
                                 <tr>
                                     <th>Text</th>
-                                    <th>Hugging Face Sentiment</th>
+                                    <th>Llama Sentiment</th>
                                     <th>Gemini Response</th>
                                 </tr>
                             </thead>
@@ -145,8 +145,8 @@ function Result() {
                                 {apiResults.map((result, index) => (
                                     <tr key={index}>
                                         <td>{result.cleaned_text}</td>
-                                        <td className={`sentiment ${result.hf_sentiment.toLowerCase()}`}>
-                                            {result.hf_sentiment}
+                                        <td className={`sentiment ${result.llama_sentiment.toLowerCase()}`}>
+                                            {result.llama_sentiment}
                                         </td>
                                         <td>{result.gemini_response}</td>
                                     </tr>
@@ -193,7 +193,7 @@ function Result() {
                                 <YAxis />
                                 <Tooltip />
                                 <Legend />
-                                <Bar dataKey="HuggingFace" fill="#8884d8" />
+                                <Bar dataKey="Llama" fill="#8884d8" />
                                 <Bar dataKey="Gemini" fill="#82ca9d" />
                             </BarChart>
                         </div>

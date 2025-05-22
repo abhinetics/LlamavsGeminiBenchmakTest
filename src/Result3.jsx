@@ -40,16 +40,16 @@ function Result3() {
             try {
                 const results = await Promise.all(
                     cleanedData.map(async (text) => {
-                        const [hfResponse, geminiResponse] = await Promise.all([
-                            fetch('http://localhost:5800/api/hf-sentiment', {
+                        const [llamaResponse, geminiResponse] = await Promise.all([
+                            fetch('http://localhost:5800/api/llama-toxicity', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ text }),
                             }).then(res => res.json()).catch(err => {
-                                console.error('Hugging Face Error:', err);
+                                console.error('Llama Error:', err);
                                 return {};
                             }),
-                            fetch('http://localhost:5800/api/gemini-generate', {
+                            fetch('http://localhost:5800/api/gemini-toxicity', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ text }),
@@ -61,8 +61,8 @@ function Result3() {
 
                         return {
                             text: text,
-                            toxicity_score: hfResponse?.[0]?.[0]?.score || 'N/A',
-                            toxicity_analysis: geminiResponse?.candidates?.[0]?.content?.parts?.[0]?.text || 'N/A'
+                            llama_toxicity_score: llamaResponse?.candidates?.[0]?.content?.parts?.[0]?.text || 'N/A',
+                            gemini_toxicity_score: geminiResponse?.candidates?.[0]?.content?.parts?.[0]?.text || 'N/A'
                         };
                     })
                 );
@@ -89,12 +89,9 @@ function Result3() {
             };
 
             apiResults.forEach(result => {
-                const score = parseFloat(result.toxicity_score);
-                if (!isNaN(score)) {
-                    if (score < 0.3) distribution['Non-Toxic']++;
-                    else if (score < 0.6) distribution['Mildly Toxic']++;
-                    else if (score < 0.8) distribution['Moderately Toxic']++;
-                    else distribution['Highly Toxic']++;
+                const llamaScore = result.llama_toxicity_score.trim();
+                if (llamaScore in distribution) {
+                    distribution[llamaScore]++;
                 }
             });
 
@@ -106,13 +103,15 @@ function Result3() {
             // Process severity levels
             const severityLevels = apiResults.map((result, index) => ({
                 text: result.text.substring(0, 20) + '...',
-                toxicity_score: parseFloat(result.toxicity_score) || 0
+                llama_score: result.llama_toxicity_score,
+                gemini_score: result.gemini_toxicity_score
             }));
 
-            // Process timeline data
+            // Process timeline data with categorical values
             const timelineData = apiResults.map((result, index) => ({
                 index: index + 1,
-                toxicity_score: parseFloat(result.toxicity_score) || 0
+                llama_score: result.llama_toxicity_score,
+                gemini_score: result.gemini_toxicity_score
             }));
 
             setChartData({
@@ -135,23 +134,22 @@ function Result3() {
         <div className="result-container">
             <h1>Toxicity Detection Results</h1>
             
-            {/* Results Table */}
             <div className="table-container mb-8">
                 {apiResults && apiResults.length > 0 ? (
                     <table className="results-table w-full">
                         <thead>
                             <tr>
                                 <th>Text</th>
-                                <th>Toxicity Score</th>
-                                <th>Analysis</th>
+                                <th>Llama Toxicity Score</th>
+                                <th>Gemini Toxicity Score</th>
                             </tr>
                         </thead>
                         <tbody>
                             {apiResults.map((result, index) => (
                                 <tr key={index}>
                                     <td>{result.text}</td>
-                                    <td>{result.toxicity_score}</td>
-                                    <td>{result.toxicity_analysis}</td>
+                                    <td>{result.llama_toxicity_score}</td>
+                                    <td>{result.gemini_toxicity_score}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -161,9 +159,7 @@ function Result3() {
                 )}
             </div>
             
-            {/* Charts Section */}
             <div className="charts-grid">
-                {/* Toxicity Distribution */}
                 <div className="chart-container">
                     <h3>Toxicity Distribution</h3>
                     <PieChart width={400} height={300}>
@@ -185,7 +181,6 @@ function Result3() {
                     </PieChart>
                 </div>
 
-                {/* Severity Levels */}
                 <div className="chart-container">
                     <h3>Toxicity Severity Levels</h3>
                     <BarChart
@@ -196,14 +191,14 @@ function Result3() {
                     >
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="text" />
-                        <YAxis />
+                        <YAxis type="category" domain={['Non-Toxic', 'Mildly Toxic', 'Moderately Toxic', 'Highly Toxic']} />
                         <Tooltip />
                         <Legend />
-                        <Bar dataKey="toxicity_score" fill="#8884d8" />
+                        <Bar dataKey="llama_score" fill="#8884d8" name="Llama Score" />
+                        <Bar dataKey="gemini_score" fill="#82ca9d" name="Gemini Score" />
                     </BarChart>
                 </div>
 
-                {/* Timeline Analysis */}
                 <div className="chart-container">
                     <h3>Toxicity Timeline Analysis</h3>
                     <LineChart
@@ -214,10 +209,11 @@ function Result3() {
                     >
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="index" />
-                        <YAxis />
+                        <YAxis type="category" domain={['Non-Toxic', 'Mildly Toxic', 'Moderately Toxic', 'Highly Toxic']} />
                         <Tooltip />
                         <Legend />
-                        <Line type="monotone" dataKey="toxicity_score" stroke="#8884d8" />
+                        <Line type="monotone" dataKey="llama_score" stroke="#8884d8" name="Llama Score" />
+                        <Line type="monotone" dataKey="gemini_score" stroke="#82ca9d" name="Gemini Score" />
                     </LineChart>
                 </div>
             </div>

@@ -18,52 +18,79 @@ const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
 // Data processing functions
 const processDistributionData = (results) => {
-  const ranges = ['0-0.2', '0.2-0.4', '0.4-0.6', '0.6-0.8', '0.8-1.0'];
-  const distribution = ranges.map(range => ({ range, count: 0 }));
+  const categories = ['Unbiased', 'Neutral', 'Biased'];
+  const distribution = categories.map(category => ({
+    category,
+    Llama: 0,
+    Gemini: 0
+  }));
   
   results.forEach(result => {
-    const score = parseFloat(result.hf_bias_score);
-    if (!isNaN(score)) {
-      const index = Math.min(Math.floor(score * 5), 4);
-      distribution[index].count++;
-    }
+    const llamaResponse = result.llama_bias_score.toLowerCase();
+    const geminiResponse = result.gemini_bias_analysis.toLowerCase();
+    
+    categories.forEach((category, index) => {
+      if (llamaResponse.includes(category.toLowerCase())) distribution[index].Llama++;
+      if (geminiResponse.includes(category.toLowerCase())) distribution[index].Gemini++;
+    });
   });
   
   return distribution;
 };
 
 const processCategoriesData = (results) => {
-  const categories = {
-    'Low Bias': 0,
-    'Moderate Bias': 0,
-    'High Bias': 0
+  const data = {
+    Llama: { Unbiased: 0, Neutral: 0, Biased: 0 },
+    Gemini: { Unbiased: 0, Neutral: 0, Biased: 0 }
   };
   
   results.forEach(result => {
-    const score = parseFloat(result.hf_bias_score);
-    if (!isNaN(score)) {
-      if (score < 0.3) categories['Low Bias']++;
-      else if (score < 0.7) categories['Moderate Bias']++;
-      else categories['High Bias']++;
-    }
+    const llamaResponse = result.llama_bias_score.toLowerCase();
+    const geminiResponse = result.gemini_bias_analysis.toLowerCase();
+    
+    if (llamaResponse.includes('unbiased')) data.Llama.Unbiased++;
+    else if (llamaResponse.includes('neutral')) data.Llama.Neutral++;
+    else if (llamaResponse.includes('biased')) data.Llama.Biased++;
+    
+    if (geminiResponse.includes('unbiased')) data.Gemini.Unbiased++;
+    else if (geminiResponse.includes('neutral')) data.Gemini.Neutral++;
+    else if (geminiResponse.includes('biased')) data.Gemini.Biased++;
   });
   
-  return Object.entries(categories).map(([name, value]) => ({ name, value }));
-};
-
-const processComparativeData = (results) => {
-  return results.map((result, index) => ({
-    index,
-    hf_score: parseFloat(result.hf_bias_score) || 0,
-    gemini_score: 0.5 // Placeholder as Gemini doesn't provide numeric scores
-  }));
+  return [
+    { name: 'Unbiased', Llama: data.Llama.Unbiased, Gemini: data.Gemini.Unbiased },
+    { name: 'Neutral', Llama: data.Llama.Neutral, Gemini: data.Gemini.Neutral },
+    { name: 'Biased', Llama: data.Llama.Biased, Gemini: data.Gemini.Biased }
+  ];
 };
 
 const processTimelineData = (results) => {
   return results.map((result, index) => ({
     index,
-    bias_score: parseFloat(result.hf_bias_score) || 0
+    Llama: result.llama_bias_score.toLowerCase().includes('unbiased') ? 'Unbiased' :
+           result.llama_bias_score.toLowerCase().includes('neutral') ? 'Neutral' : 'Biased',
+    Gemini: result.gemini_bias_analysis.toLowerCase().includes('unbiased') ? 'Unbiased' :
+            result.gemini_bias_analysis.toLowerCase().includes('neutral') ? 'Neutral' : 'Biased'
   }));
+};
+
+const processComparativeData = (results) => {
+  return results.map((result, index) => {
+    const llamaResponse = result.llama_bias_score.toLowerCase();
+    const geminiResponse = result.gemini_bias_analysis.toLowerCase();
+    
+    const getCategoryValue = (response) => {
+      if (response.includes('unbiased')) return 'Unbiased';
+      if (response.includes('neutral')) return 'Neutral';
+      return 'Biased';
+    };
+
+    return {
+      index,
+      llama_category: getCategoryValue(llamaResponse),
+      gemini_category: getCategoryValue(geminiResponse)
+    };
+  });
 };
 
 function Result2() {
@@ -78,7 +105,7 @@ function Result2() {
         comparative: [],
         timeline: []
     });
-
+    
     // First useEffect for API calls
     useEffect(() => {
         const callApis = async () => {
@@ -94,16 +121,16 @@ function Result2() {
             try {
                 const results = await Promise.all(
                     cleanedData.map(async (text) => {
-                        const [hfResponse, geminiResponse] = await Promise.all([
-                            fetch('http://localhost:5800/api/hf-sentiment', {
+                        const [llamaResponse, geminiResponse] = await Promise.all([
+                            fetch('http://localhost:5800/api/llama-bias', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ text }),
                             }).then(res => res.json()).catch(err => {
-                                console.error('Hugging Face Error:', err);
+                                console.error('Llama Error:', err);
                                 return {};
                             }),
-                            fetch('http://localhost:5800/api/gemini-generate', {
+                            fetch('http://localhost:5800/api/gemini-bias', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ text }),
@@ -115,7 +142,7 @@ function Result2() {
 
                         return {
                             text: text,
-                            hf_bias_score: hfResponse?.[0]?.[0]?.score || 'N/A',
+                            llama_bias_score: llamaResponse?.candidates?.[0]?.content?.parts?.[0]?.text || 'N/A',
                             gemini_bias_analysis: geminiResponse?.candidates?.[0]?.content?.parts?.[0]?.text || 'N/A'
                         };
                     })
@@ -132,7 +159,6 @@ function Result2() {
         callApis();
     }, [cleanedData]);
 
-    // Second useEffect for processing chart data
     useEffect(() => {
         if (apiResults) {
             const distribution = processDistributionData(apiResults);
@@ -161,14 +187,13 @@ function Result2() {
         <div className="result-container">
             <h1>Bias Assessment Results</h1>
             
-            {/* Results Table */}
             <div className="table-container mb-8">
                 {apiResults && apiResults.length > 0 ? (
                     <table className="results-table w-full">
                         <thead>
                             <tr>
                                 <th>Text</th>
-                                <th>HuggingFace Bias Score</th>
+                                <th>Llama Bias Score</th>
                                 <th>Gemini Bias Analysis</th>
                             </tr>
                         </thead>
@@ -176,7 +201,7 @@ function Result2() {
                             {apiResults.map((result, index) => (
                                 <tr key={index}>
                                     <td>{result.text}</td>
-                                    <td>{result.hf_bias_score}</td>
+                                    <td>{result.llama_bias_score}</td>
                                     <td>{result.gemini_bias_analysis}</td>
                                 </tr>
                             ))}
@@ -187,67 +212,67 @@ function Result2() {
                 )}
             </div>
             
-            {/* Charts Section */}
             <div className="charts-grid">
-                {/* Bias Score Distribution */}
                 <div className="chart-container">
-                    <h3>Bias Score Distribution</h3>
+                    <h3>Bias Distribution Comparison</h3>
                     <BarChart width={500} height={300} data={chartData.distribution}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="range" />
+                        <XAxis dataKey="category" />
                         <YAxis />
                         <Tooltip />
                         <Legend />
-                        <Bar dataKey="count" fill="#8884d8" />
+                        <Bar dataKey="Llama" fill="#8884d8" />
+                        <Bar dataKey="Gemini" fill="#82ca9d" />
                     </BarChart>
                 </div>
 
-                {/* Bias Categories */}
                 <div className="chart-container">
-                    <h3>Bias Categories</h3>
-                    <PieChart width={500} height={300}>
-                        <Pie
-                            data={chartData.categories}
-                            cx="50%"
-                            cy="50%"
-                            labelLine={false}
-                            outerRadius={100}
-                            fill="#8884d8"
-                            dataKey="value"
-                        >
-                            {chartData.categories.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
-                        </Pie>
-                        <Tooltip />
-                        <Legend />
-                    </PieChart>
-                </div>
-
-                {/* Timeline Analysis */}
-                <div className="chart-container">
-                    <h3>Bias Score Timeline</h3>
-                    <LineChart width={500} height={300} data={chartData.timeline}>
+                    <h3>Bias Categories Comparison</h3>
+                    <BarChart width={500} height={300} data={chartData.categories}>
                         <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="index" />
+                        <XAxis dataKey="name" />
                         <YAxis />
                         <Tooltip />
                         <Legend />
-                        <Line type="monotone" dataKey="bias_score" stroke="#8884d8" />
+                        <Bar dataKey="Llama" fill="#8884d8" />
+                        <Bar dataKey="Gemini" fill="#82ca9d" />
+                    </BarChart>
+                </div>
+
+                <div className="chart-container">
+                    <h3>Bias Analysis Timeline</h3>
+                    <LineChart width={500} height={300} data={chartData.timeline}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="index" />
+                        <YAxis type="category" domain={['Unbiased', 'Neutral', 'Biased']} />
+                        <Tooltip />
+                        <Legend />
+                        <Line type="monotone" dataKey="Llama" stroke="#8884d8" />
+                        <Line type="monotone" dataKey="Gemini" stroke="#82ca9d" />
                     </LineChart>
                 </div>
 
-                {/* Comparative Analysis */}
                 <div className="chart-container">
                     <h3>Model Comparison</h3>
                     <ScatterChart width={500} height={300}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="index" type="number" name="Index" />
-                        <YAxis type="number" name="Score" />
+                        <YAxis type="category" dataKey="category" name="Category" 
+                               domain={['Unbiased', 'Neutral', 'Biased']} />
                         <Tooltip cursor={{ strokeDasharray: '3 3' }} />
                         <Legend />
-                        <Scatter name="HuggingFace Score" data={chartData.comparative} dataKey="hf_score" fill="#8884d8" />
-                        <Scatter name="Gemini Score" data={chartData.comparative} dataKey="gemini_score" fill="#82ca9d" />
+                        <Scatter 
+                            name="Llama Analysis" 
+                            data={chartData.comparative} 
+                            dataKey="llama_category" 
+                            fill="#8884d8" 
+                        />
+                        <Scatter 
+                            name="Gemini Analysis" 
+                            data={chartData.comparative} 
+                            dataKey="gemini_category" 
+                            fill="#82ca9d" 
+                        />
                     </ScatterChart>
                 </div>
             </div>
