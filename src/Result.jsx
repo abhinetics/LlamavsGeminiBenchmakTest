@@ -43,7 +43,7 @@ function Result() {
                 const results = await Promise.all(
                     cleanedData.map(async (text, index) => {
                         const [llamaResponse, geminiResponse] = await Promise.all([
-                            fetch('http://localhost:5800/api/llama-generate', {
+                            fetch('https://llamageminibackend.onrender.com/api/llama-generate', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ text }),
@@ -51,7 +51,7 @@ function Result() {
                                 console.error('llama Error:', err);
                                 return {};
                             }),
-                            fetch('http://localhost:5800/api/gemini-generate', {
+                            fetch('https://llamageminibackend.onrender.com/api/gemini-generate', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ text }),

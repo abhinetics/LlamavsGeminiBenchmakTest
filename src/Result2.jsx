@@ -122,7 +122,7 @@ function Result2() {
                 const results = await Promise.all(
                     cleanedData.map(async (text) => {
                         const [llamaResponse, geminiResponse] = await Promise.all([
-                            fetch('http://localhost:5800/api/llama-bias', {
+                            fetch('https://llamageminibackend.onrender.com/api/llama-bias', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ text }),
@@ -130,7 +130,7 @@ function Result2() {
                                 console.error('Llama Error:', err);
                                 return {};
                             }),
-                            fetch('http://localhost:5800/api/gemini-bias', {
+                            fetch('https://llamageminibackend.onrender.com/api/gemini-bias', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({ text }),
